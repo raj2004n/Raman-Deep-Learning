@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 path = Path("~/Code/Data_SH/SB008").expanduser()
-raman_data = Raman_Data(path, 20, 20)
+raman_data = Raman_Data(path, 10, 13)
 
 preprocessed_slice, raw_slice, raman_shifts = raman_data.get_all_spectra(1)
 

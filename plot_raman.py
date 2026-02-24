@@ -202,7 +202,6 @@ def main():
         area_by_region, spectra_by_pixel,
         raman_shift_arr, idx_step,
     )
-    
     on_hover = make_on_hover(fig, ax_image, hover_text, pixel_map, raman_data)
     on_click = make_on_click(
         fig, ax_image, ax_spectra,

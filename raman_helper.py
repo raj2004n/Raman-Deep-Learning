@@ -188,8 +188,8 @@ class Raman_Data:
             pixel += 1
 
         return area_by_region, shift_by_region, spectra_by_region, original_spectra_by_region
-    
-    def get_area_range(self, pipeline, shift_range):
+
+    def get_area_range(self, pipeline, rolling_window, spectra_start, spectra_end):
         """
         Method to find the area under the curve by regions.
         
@@ -202,40 +202,49 @@ class Raman_Data:
         original_spectra_by_region was added to compare with preprocessed data
 
         :param pipeline: pipeline to use. Currently using predefined pipelines from RamanSPy library.
-        :param regions: Number of regions to split the spectra into.
+        :param regions:
         """
         # get files
         files = self.get_files()
-
-        if pipeline == 1:
+        if pipeline == 0:
+            pipeline = None
+        elif pipeline == 1:
             pipeline = rp.preprocessing.protocols.georgiev2023_P1(normalisation_pixelwise=True, fingerprint=False)
         elif pipeline == 2:
             pipeline = rp.preprocessing.protocols.georgiev2023_P2(normalisation_pixelwise=True, fingerprint=False)
         elif pipeline == 3:
             pipeline = rp.preprocessing.protocols.georgiev2023_P3(normalisation_pixelwise=True, fingerprint=False)
 
+        # cropper
+        cropper = rp.preprocessing.misc.Cropper(region=(spectra_start, spectra_end))
+
         # read in raman_shifts and store as list (only from one file, since same in all files)
         raman_shifts = pd.read_csv(files[0], sep='\t', names=['raman_shift'], header=None, usecols=[0])['raman_shift'].tolist()
         
-        # steps between adjacent numbers and overall mean
-        steps = np.diff(raman_shifts)
-        mean_step = np.mean(steps) # one mean step corresponds to one index step
-        dx = mean_step
+        temp_intensity_arr = pd.read_csv(files[0], sep='\t', names=['intensity'], header=None, usecols=[1],)['intensity'].values
+        temp_spectra = rp.Spectrum(temp_intensity_arr, raman_shifts)
+        temp_spectra = cropper.apply(temp_spectra)
 
-        # range is greater than the mean step
-        if shift_range > mean_step:
-            idx_step = int(shift_range // mean_step)
+        # cropped raman shfit
+        cropped_raman_shifts = temp_spectra.spectral_axis
+
+        # steps between adjacent numbers and overall mean
+        steps = np.diff(cropped_raman_shifts)
+        mean_step = np.mean(steps) # one mean step corresponds to one index step
+
+        # rolling window is greater than the mean step
+        if rolling_window > mean_step:
+            idx_step = int(rolling_window // mean_step)
         else:# range is less than the mean step
             idx_step = 1 # min step
 
         kernel = np.ones(idx_step)
         kernel[0] = 0.5
         kernel[-1] = 0.5
-        kernel = kernel * dx
+        kernel = kernel * mean_step
 
-        area_by_region = np.zeros(shape=(self.x, self.y, len(raman_shifts) - idx_step + 1))
-        # key: pixel, region. value: spectra of that region for that pixel
-        spectra_by_pixel = np.zeros(shape=(self.x * self.y + 1, len(raman_shifts)))
+        area_by_region = np.zeros(shape=(self.x, self.y, len(cropped_raman_shifts) - idx_step + 1))
+        spectra_by_pixel = np.zeros(shape=(self.x * self.y + 1, len(cropped_raman_shifts)))
         pixel_map = np.zeros(shape=(self.x, self.y), dtype=int)
         
         # position of grid 1 at bottom-left corner
@@ -247,9 +256,12 @@ class Raman_Data:
             # read the intensity column and store as list
             intensity_arr = pd.read_csv(file, sep='\t', names=['intensity'], header=None, usecols=[1],)['intensity'].values
             raman_spectra = rp.Spectrum(intensity_arr, raman_shifts) # make raman spectra object
-            raman_spectra = pipeline.apply(raman_spectra) # apply preprocessing
+            raman_spectra = cropper.apply(raman_spectra) # crop the spectra
+
+            if pipeline is not None:
+                raman_spectra = pipeline.apply(raman_spectra) # apply preprocessing
             preprocessed_data = raman_spectra.spectral_data # extract preprocessed data
-            
+
             areas = convolve(preprocessed_data, kernel, mode='valid')
 
             area_by_region[cur_x, cur_y, :] = areas
@@ -264,9 +276,9 @@ class Raman_Data:
             # move to next pixel
             pixel += 1
         
-        return area_by_region, spectra_by_pixel, raman_shifts, idx_step, pixel_map
-    
-    def get_slices(self, pipeline):
+        return area_by_region, spectra_by_pixel, cropped_raman_shifts, idx_step, pixel_map
+
+    def get_raw_slices(self):
         """
         Method to get all the slices of the Raman Image. 
         
@@ -276,13 +288,6 @@ class Raman_Data:
         """
         # get files
         files = self.get_files()
-
-        if pipeline == 1:
-            pipeline = rp.preprocessing.protocols.georgiev2023_P1(normalisation_pixelwise=True, fingerprint=False)
-        elif pipeline == 2:
-            pipeline = rp.preprocessing.protocols.georgiev2023_P2(normalisation_pixelwise=True, fingerprint=False)
-        elif pipeline == 3:
-            pipeline = rp.preprocessing.protocols.georgiev2023_P3(normalisation_pixelwise=True, fingerprint=False)
 
         # read in raman_shifts and store as list (only from one file, since same in all files)
         raman_shifts = pd.read_csv(files[0], sep='\t', names=['raman_shift'], header=None, usecols=[0])['raman_shift'].tolist()
@@ -304,8 +309,7 @@ class Raman_Data:
             # step
             cur_x, cur_y, step = self.step_grid(cur_x, cur_y, step)
 
-        raman_slice = rp.SpectralContainer(spectral_data, spectral_axis)
-        raman_slice = pipeline.apply(raman_slice)
+        raman_slice = rp.SpectralImage(spectral_data, spectral_axis)
 
         return raman_slice
     
@@ -374,7 +378,7 @@ class Raman_Data:
 
         # { pixel, spectra}
         spectra_pixel = {}
-        original_spectra_pixel = {}
+        raw_spectra_pixel = {}
         
         # position of grid 1 at bottom-left corner
         cur_x, cur_y =  self.x - 1, 0
@@ -388,7 +392,7 @@ class Raman_Data:
             # make raman spectra object and preprocess spectra
             raman_spectra = rp.Spectrum(intensity_arr, raman_shifts)
 
-            original_spectra_pixel[pixel] = raman_spectra
+            raw_spectra_pixel[pixel] = raman_spectra
 
             raman_spectra = pipeline.apply(raman_spectra)
 
@@ -399,4 +403,4 @@ class Raman_Data:
             # increment pixel
             pixel += 1
 
-        return spectra_pixel, original_spectra_pixel, raman_shifts
+        return spectra_pixel, raw_spectra_pixel, raman_shifts

@@ -1,4 +1,4 @@
-from raman_helper import *
+from data.raman_helper import *
 from matplotlib.widgets import TextBox
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec

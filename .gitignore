@@ -1,43 +1,35 @@
 # --- Environments ---
-# Folders created by venv, virtualenv, or conda
-venv/
 .venv/
+venv/
 env/
 ENV/
-bin/
-lib/
-include/
 
 # --- Python Artifacts ---
-# Compiled python files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 
-# --- TensorFlow & Data ---
-# If you save models or logs, ignore the heavy stuff
+# --- Artifacts (models, weights, encoders, metadata) ---
+artifacts/
+
+# --- Outputs (generated plots and figures) ---
+outputs/
+
+# --- Logs & Checkpoints ---
 logs/
 *.ckpt
-*.h5
 *.pb
 *.tflite
-*.npy
-*.npz
 
-# --- Jupyter Notebooks ---
-.ipynb_checkpoints
+# --- Jupyter ---
+.ipynb_checkpoints/
 
 # --- Distribution / Packaging ---
-# If you ever build your own package
 dist/
 build/
 *.egg-info/
 
 # --- OS Specific ---
 .DS_Store
-Thumbs.db*.keras
-*.h5
-*.pkl
-*.npy
-*.keras
+Thumbs.db

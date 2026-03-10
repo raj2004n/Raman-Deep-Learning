@@ -1,5 +1,5 @@
 from pathlib import Path
-from raman_helper import Raman_Data
+from src.data.dataset import get_area_under_hsi_cube
 from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider, TextBox, RangeSlider
 import argparse
@@ -7,14 +7,10 @@ import numpy as np
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 
+#TODO: remember to change the saving locations for your training models
 """
 e.g. input:
-python3 plot_raman.py ~/Code/Data_SH/FullCavity_20x20_2umsteps 20 20 --pipeline 2 --rolling_window 50
-
-python3 plot_raman.py ~/Code/Data_SH/SB008 10 13 --pipeline 0 --rolling_window 50
-
-python3 plot_raman.py ~/Code/Data_SH/SB008 10 13 --pipeline 0 --rolling_window 50 --spectra_start 0 --spectra_end 100 
-
+python3 -m scripts.plot_raman ~/Code/Data_SH/SB008 10 13 --pipeline 0 --rolling_window 50
 """
 
 def parse_args():
@@ -78,12 +74,12 @@ def make_update(fig, ax_spectra, image, pixel_specra,
 
     return update
 
-def make_on_hover(fig, ax_image, hover_text, pixel_map, raman_data):
+def make_on_hover(fig, ax_image, hover_text, pixel_map, x, y):
 
     def on_hover(event):
         if event.inaxes == ax_image:
-            col = np.clip(int(event.xdata + 0.5), 0, raman_data.y - 1)
-            row = np.clip(int(event.ydata + 0.5), 0, raman_data.x - 1)
+            col = np.clip(int(event.xdata + 0.5), 0, y - 1)
+            row = np.clip(int(event.ydata + 0.5), 0, x - 1)
             hover_text.set_text(f"Pixel {pixel_map[row, col]}")
         else:
             hover_text.set_text("")
@@ -93,14 +89,14 @@ def make_on_hover(fig, ax_image, hover_text, pixel_map, raman_data):
 
 def make_on_click(fig, ax_image, ax_spectra,
                   pixel_specra, text_box, spectra_by_pixel,
-                  pixel_map, raman_data, intensity_range):
+                  pixel_map, x, y):
 
     def on_click(event):
         if event.inaxes != ax_image or not event.dblclick:
             return
 
-        col   = np.clip(int(event.xdata + 0.5), 0, raman_data.y - 1)
-        row   = np.clip(int(event.ydata + 0.5), 0, raman_data.x - 1)
+        col   = np.clip(int(event.xdata + 0.5), 0, y - 1)
+        row   = np.clip(int(event.ydata + 0.5), 0, x - 1)
         pixel = pixel_map[row, col]
 
         text_box.set_val(str(pixel)) # also fires on_submit → update()
@@ -112,11 +108,10 @@ def make_on_click(fig, ax_image, ax_spectra,
 
     return on_click
 
-def main(path, x, y, pipeline, rolling_window, spectra_start, spectra_end):
-    
-    raman_data = Raman_Data(Path(path).expanduser(), x, y)
-    
-    area_cube, spectra_of_pixel, raman_shift, idx_step, pixel_map = raman_data.get_hsi_cube(pipeline, rolling_window, spectra_start, spectra_end)
+def main(path, x, y, pipeline_id, rolling_window_width, start, end):
+    area_cube, spectra_of_pixel, raman_shift, idx_step, pixel_map = get_area_under_hsi_cube(
+        path, x, y, pipeline_id, rolling_window_width, start, end
+        )
 
     fig, (ax_image, ax_spectra) = plt.subplots(2, 1, figsize=(8, 20), squeeze=True, gridspec_kw={"height_ratios": [5, 2]})
     fig.subplots_adjust(bottom=0.20)
@@ -180,11 +175,11 @@ def main(path, x, y, pipeline, rolling_window, spectra_start, spectra_end):
         area_cube, spectra_of_pixel,
         raman_shift_arr, idx_step, cbar, scalar_mappable,
     )
-    on_hover = make_on_hover(fig, ax_image, hover_text, pixel_map, raman_data)
+    on_hover = make_on_hover(fig, ax_image, hover_text, pixel_map, x, y)
     on_click = make_on_click(
         fig, ax_image, ax_spectra,
         pixel_specra, text_box, spectra_of_pixel,
-        pixel_map, raman_data, intensity_range
+        pixel_map, x, y
     )
 
     text_box.on_submit(update)

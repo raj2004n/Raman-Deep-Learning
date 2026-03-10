@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.patches import Patch
 from data import standardise_data
-from raman_helper import *
+from src.data.raman_helper import *
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 

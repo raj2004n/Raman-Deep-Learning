@@ -6,7 +6,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from statannotations.Annotator import Annotator
 import ramanspy as rp
 from pathlib import Path 
-from raman_helper import *
+from data.raman_helper import *
 
 import torch
 from torch import nn

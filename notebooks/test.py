@@ -1,7 +1,7 @@
 """
 Space to test pysptools. Focusign on Hysime
 """
-from raman_helper import *
+from data.raman_helper import *
 import pysptools
 from pysptools import material_count
 # load data

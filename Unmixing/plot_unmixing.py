@@ -8,7 +8,7 @@ from matplotlib.widgets import Slider, TextBox, RangeSlider
 from matplotlib.colors import Normalize
 import matplotlib.cm as cm
 
-from raman_helper import Raman_Data
+from data.raman_helper import Raman_Data
 from data_analysis import Analysis
 """
 e.g. input:

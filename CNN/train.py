@@ -35,14 +35,14 @@ spectra_train = [spectra_list[i] for i in train_index]
 spectra_test = [spectra_list[i] for i in test_index]
 
 # hard coded for now
-x_min, x_max = 100, 1800
+x_min, x_max = 0, 1400
 
 # standardise the training and testing data
 x_train = standardise_data(spectra_train, target_length=913, x_min=x_min, x_max=x_max)
 x_test = standardise_data(spectra_test, target_length=913, x_min=x_min, x_max=x_max)
 
 # augment by summing possible linear combinations
-x_combos, y_combos_labels = build_augmented_dataset(x_train, y_train_labels, n_combination=1)
+x_combos, y_combos_labels = build_augmented_dataset(x_train, y_train_labels, n_combination=10)
 
 # update training datasset to include augmented data
 x_train = np.concatenate([x_train, x_combos], axis=0)
@@ -82,6 +82,36 @@ history = model.fit(
     validation_data=val_gen,
     class_weight=class_weight_dict,
     )
+
+from collections import Counter
+
+train_counts = Counter(y_train_labels)
+test_counts  = Counter(y_test_labels)
+all_counts   = Counter(np.concatenate([y_train_labels, y_test_labels]))
+
+single_sample_classes = sum(1 for c in all_counts if all_counts[c] == 1)
+train_only_classes    = sum(1 for c in train_counts if c not in test_counts)
+
+print(f"Training spectra:              {len(spectra_train)}")
+print(f"Test spectra:                  {len(spectra_test)}")
+print(f"Total classes:                 {num_classes}")
+print(f"Classes with only 1 spectrum:  {single_sample_classes}")
+print(f"Classes only in train set:     {train_only_classes}")
+print(f"x_all size after augmentation: {len(x_train)}")
+print(f"Steps per epoch:               {len(train_gen)}")
+print(f"Stopped at epoch:              {len(history.history['loss'])}")
+
+# Distribution breakdown
+counts = list(all_counts.values())
+print(f"\nSpectra per class distribution:")
+print(f"  Min:    {min(counts)}")
+print(f"  Max:    {max(counts)}")
+print(f"  Mean:   {np.mean(counts):.1f}")
+print(f"  Median: {np.median(counts):.1f}")
+print(f"  Classes with 1 spectrum:  {sum(1 for c in counts if c == 1)}")
+print(f"  Classes with 2 spectra:   {sum(1 for c in counts if c == 2)}")
+print(f"  Classes with 3+ spectra:  {sum(1 for c in counts if c >= 3)}")
+
 
 # save full model and wavenumber range
 model.save("raman_cnn_model.keras")

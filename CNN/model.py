@@ -19,17 +19,17 @@ def CNN_model(num_classes):
     x = Conv1D(filters=16, kernel_size=21, kernel_initializer=initializer)(inputs)
     x = BatchNormalization()(x)
     x = LeakyReLU()(x)
-    x = MaxPool1D(pool_size=2)(x)
-
+    x = MaxPool1D(2, 2)(x)
+    
     x = Conv1D(filters=32, kernel_size=11, kernel_initializer=initializer)(x)
     x = BatchNormalization()(x)
     x = LeakyReLU()(x)
-    x = MaxPool1D(pool_size=2)(x)
+    x = MaxPool1D(2, 2)(x)
     
     x = Conv1D(filters=64, kernel_size=5, kernel_initializer=initializer)(x)
     x = BatchNormalization()(x)
     x = LeakyReLU()(x)
-    x = MaxPool1D(pool_size=2)(x)
+    x = MaxPool1D(2, 2)(x)
     
     x = Flatten()(x)
     

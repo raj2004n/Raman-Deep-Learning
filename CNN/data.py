@@ -8,17 +8,12 @@ import keras
 from keras.utils import to_categorical
 
 def get_data():
-    path1 = os.path.expanduser('~/Code/Data_SH/unrated_oriented')
-    path2 = os.path.expanduser('~/Code/Data_SH/unrated_unoriented')
+    path = os.path.expanduser('~/Code/Data_SH/poor_unoriented')
 
-    #spectra1, metadata1 = rp.datasets.rruff(path1, download=False)
-    spectra2, metadata2 = rp.datasets.rruff(path2, download=False)
+    spectra, metadata = rp.datasets.rruff(path, download=False)
+    return spectra, metadata
 
-    #spectra  = spectra1 + spectra2
-    #metadata = metadata1 + metadata2
-    return spectra2, metadata2
-
-def standardise_data(spectra_list, target_length, x_min=100, x_max=1800):
+def standardise_data(spectra_list, target_length, x_min=0, x_max=1400):
     standardised_data = []
     # new wavenumber axis the intensity will be interpolated to
     new_x = np.linspace(x_min, x_max, target_length)
@@ -163,41 +158,6 @@ class DataGenerator(keras.utils.Sequence):
         self.indexes = np.arange(len(self.x))
         if self.shuffle:
             np.random.shuffle(self.indexes)
-
-    def __data_generation1(self, indexes):
-        'Generates data containing batch_size samples'
-        
-        if self.augment:
-            # 4 versions per sample: original, shift, noise, shift+noise
-            x_batch = np.empty((self.batch_size * 4, *self.dim, self.n_channels))
-            y_batch = np.empty((self.batch_size * 4), dtype=int)
-        else:
-            x_batch = np.empty((self.batch_size, *self.dim, self.n_channels))
-            y_batch = np.empty((self.batch_size), dtype=int)
-
-        for i, index in enumerate(indexes):
-            spectrum = self.x[index].copy()
-            label    = self.y[index]
-
-            if self.augment:
-                shift_only      = augment_shift(spectrum)
-                noise_only      = augment_noise(spectrum)
-                shift_and_noise = augment_noise(augment_shift(spectrum))
-
-                x_batch[i * 4]     = spectrum
-                x_batch[i * 4 + 1] = shift_only
-                x_batch[i * 4 + 2] = noise_only
-                x_batch[i * 4 + 3] = shift_and_noise
-
-                y_batch[i * 4]     = label
-                y_batch[i * 4 + 1] = label
-                y_batch[i * 4 + 2] = label
-                y_batch[i * 4 + 3] = label
-            else:
-                x_batch[i] = spectrum
-                y_batch[i] = label
-
-        return x_batch, to_categorical(y_batch, num_classes=self.num_classes)
 
     def __data_generation(self, indexes):
         'Generates data containing batch_size samples'

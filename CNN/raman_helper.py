@@ -275,16 +275,28 @@ class Raman_Data:
         
         return area_cube, spectra_of_pixel, cropped_raman_shifts, idx_step, pixel_map
 
-    def get_raw_hsi_cube(self):
+    def get_raw_hsi_cube(self, spectra_start=None, spectra_end=None):
         # get files
         files = self.get_files()
 
         # read in raman_shifts and store as list (only from one file, since same in all files)
         raman_shifts = pd.read_csv(files[0], sep='\t', names=['raman_shift'], header=None, usecols=[0])['raman_shift'].tolist()
 
-        spectral_data = np.zeros(shape=(self.x, self.y, len(raman_shifts))) 
         spectral_axis =  np.array(raman_shifts)
         
+        # find crop indices
+        start_idx = 0
+        end_idx   = len(raman_shifts)
+        if spectra_start is not None:
+                start_idx = np.searchsorted(spectral_axis, spectra_start)
+        if spectra_end is not None:
+            end_idx = np.searchsorted(spectral_axis, spectra_end)
+        
+        # crop the axis
+        spectral_axis = spectral_axis[start_idx:end_idx]
+    
+        spectral_data = np.zeros(shape=(self.x, self.y, len(spectral_axis)))
+
         # position of grid 1 at bottom-left corner
         cur_x, cur_y =  self.x - 1, 0
         step = 1 # intially steps forward (right)
@@ -292,7 +304,8 @@ class Raman_Data:
         for file in files:
             # read the intensity column, store as list
             intensity_arr = pd.read_csv(file, sep='\t', names=['intensity'], header=None,usecols=[1],)['intensity'].tolist()
-            
+            # crop intensity to match cropped axis
+            intensity_arr = intensity_arr[start_idx:end_idx]
             # assign integral to its grid position
             spectral_data[cur_x, cur_y] = intensity_arr
 

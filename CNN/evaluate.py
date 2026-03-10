@@ -5,18 +5,24 @@ def show_results(history, model, x_test, y_test):
     print("Test loss:", loss)
     print("Test accuracy:", accuracy)
 
-    plt.plot(history.history['accuracy'])
-    plt.plot(history.history['val_accuracy'])
-    plt.title('model accuracy')
-    plt.xlabel('epoch')
-    plt.ylabel('accuracy')
-    plt.legend(['training', 'validation'], loc='best')
-    plt.show()
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-    plt.plot(history.history['loss'])
-    plt.plot(history.history['val_loss'])
-    plt.title('model loss')
-    plt.xlabel('epoch')
-    plt.ylabel('loss')
-    plt.legend(['training', 'validation'], loc='best')
+    # Accuracy plot
+    ax1.plot(history.history['accuracy'], label='training')
+    ax1.plot(history.history['val_accuracy'], label='validation')
+    ax1.set_title('Model Accuracy')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Accuracy')
+    ax1.legend(loc='best')
+
+    # Loss plot
+    ax2.plot(history.history['loss'], label='training')
+    ax2.plot(history.history['val_loss'], label='validation')
+    ax2.set_title('Model Loss')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Loss')
+    ax2.legend(loc='best')
+
+    plt.tight_layout()
+    plt.savefig('training_results.png', dpi=150, bbox_inches='tight')
     plt.show()

@@ -59,10 +59,8 @@ y_train_integers = le.transform(y_train_labels)
 class_weights = compute_class_weight(class_weight='balanced', classes=classes_array, y=y_train_integers)
 class_weight_dict = dict(enumerate(class_weights))
 
-
-#TODO: 64 for quickness, then test with 32
 train_gen = DataGenerator(
-    x_train, le.transform(y_train_labels),
+    x_train, y_train_integers,
     num_classes,
     batch_size = 64,
     shuffle = True,
@@ -79,15 +77,11 @@ val_gen = DataGenerator(
 
 history = model.fit(
     train_gen,
-    epochs=100,
-    validation_data=val_gen,
+    epochs=500,
     callbacks=[callback],
-    class_weight=class_weight_dict
+    validation_data=val_gen,
+    class_weight=class_weight_dict,
     )
-
-test_scores = model.evaluate(x_test, y_test, verbose=2)
-print("Test loss:", test_scores[0])
-print("Test accuracy:", test_scores[1])
 
 # save full model and wavenumber range
 model.save("raman_cnn_model.keras")

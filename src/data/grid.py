@@ -3,7 +3,7 @@ from pathlib import Path
 
 class RamanGrid:
     def __init__(self, path, x, y):
-        self.path = Path(path)
+        self.path = Path(path).expanduser() 
         self.x = x
         self.y = y
 
@@ -26,8 +26,7 @@ class RamanGrid:
         files = list(self.path.glob('*.txt'))
         # if no files found
         if not files:
-            print("No .txt files found in that directory.")
-            return 
+            raise FileNotFoundError(f"No .txt files found in {self.path}")
         # sort the files in the order of their file number
         files.sort(key=self._get_file_number)
         return files

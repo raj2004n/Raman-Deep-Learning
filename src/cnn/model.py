@@ -1,12 +1,12 @@
 from keras.models import Model
-from keras.layers import Input, Dense, Conv1D, Flatten, LeakyReLU, MaxPool1D, Concatenate, Dropout, BatchNormalization, Softmax, InputLayer
+from keras.layers import Input, Dense, Conv1D, Flatten, LeakyReLU, MaxPool1D, Dropout, BatchNormalization, Softmax
 from keras.initializers import RandomNormal
 import numpy as np
 import tensorflow as tf
-from keras import layers, models, Input, optimizers
+from keras import optimizers
 
-def CNN_model(num_classes):
-    inputs = Input(shape=(913,1))
+def CNN_Model(num_classes, input_size):
+    inputs = Input(shape=(input_size,1))
     initializer = RandomNormal(mean=0.0, stddev=np.sqrt(0.05))
 
     opt = optimizers.Adam(

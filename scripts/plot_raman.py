@@ -1,7 +1,8 @@
 from src.data.loader import *
 from src.visualisation.spatial import *
+from src.cnn.predict import predict
+from src.visualisation.spatial import show_prediction_map
 
-#TODO: remember to change the saving locations for your training models
 #TODO: since the trained model does so well on preprocessed data, pass in preprocessed data
 def prompt_args():
     print("\nEnter path, grid rows and grid columns:")
@@ -16,19 +17,21 @@ def prompt_args():
             except ValueError:
                 print("x and y must be integers, please try again")
         else:
-            #print("Please enter exactly 3 values: path x y")
             path, x, y = "~/Code/Data_SH/SB008", "10", "13"
             try:
                 x, y = int(x), int(y)
                 break
             except ValueError:
                 print("x and y must be integers, please try again")
+
     mode = prompt_mode()
 
     if mode == "heatmap":
         kwargs = prompt_heatmap_args()
     elif mode == "unmixing":
         kwargs = prompt_unmixing_args()
+    elif mode == "predict":
+        kwargs = {}
 
     return path, x, y, mode, kwargs
 
@@ -36,14 +39,15 @@ def prompt_mode():
     print("\n Select mode:")
     print("  [1] Heatmap")
     print("  [2] Unmixing")
+    print("  [3] Predict")
 
-    choices = {"1": "heatmap", "2": "unmixing"}
+    choices = {"1": "heatmap", "2": "unmixing", "3": "predict"}
 
     while True:
         val = input("> ").strip()
         if val in choices:
             return choices[val]
-        print(f"Invalid choice, please enter 1 or 2")
+        print(f"Invalid choice, please enter 1, 2, or 3.")
 
 def prompt_heatmap_args():
     print("\nPipeline? [0] None  [1] P1  [2] P2  [3] P3  (default: 0)")
@@ -98,6 +102,13 @@ def main():
     elif mode == "unmixing":
         hsi_cube = get_raw_hsi_cube(path, x, y)
         show_unmixing_viewer(hsi_cube, kwargs["end_members"], kwargs["start"], kwargs["end"])
+
+    elif mode == "predict":
+        predicted_labels_map, predicted_top5_map = predict(path, x, y)
+        show_prediction_map(
+            predicted_labels_map, predicted_top5_map,
+            save_path="outputs/mineral_map.png"
+        )
 
 if __name__ == "__main__":
     main()

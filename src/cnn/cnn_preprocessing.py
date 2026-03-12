@@ -6,12 +6,7 @@ from scipy.interpolate import interp1d
 from sklearn.preprocessing import LabelEncoder
 import keras
 from keras.utils import to_categorical
-
-def get_data():
-    path = os.path.expanduser('~/Code/Data_SH/poor_unoriented')
-
-    spectra, metadata = rp.datasets.rruff(path, download=False)
-    return spectra, metadata
+import matplotlib.pyplot as plt
 
 def standardise_data(spectra_list, target_length, x_min=0, x_max=1400):
     standardised_data = []
@@ -33,6 +28,39 @@ def standardise_data(spectra_list, target_length, x_min=0, x_max=1400):
         standardised_data.append(new_y.reshape(-1, 1))
     # returns shape (target_length, 1)
     return np.array(standardised_data)
+
+def plot_standardised_comparison(spectra_list, n_samples=4, target_length=2864, x_min=0, x_max=1400):
+    new_x = np.linspace(x_min, x_max, target_length)
+    fig, axes = plt.subplots(n_samples, 2, figsize=(16, 3 * n_samples))
+
+    for i in range(n_samples):
+        spectrum = spectra_list[i]
+        x = spectrum.spectral_axis
+        y = spectrum.spectral_data
+
+        # linear
+        f_lin = interp1d(x, y, kind='linear', bounds_error=False, fill_value='extrapolate')
+        y_lin = np.clip(f_lin(new_x), 0, None)
+        y_lin /= (y_lin.max() + 1e-8)
+
+        # cubic
+        f_cub = interp1d(x, y, kind='cubic', bounds_error=False, fill_value='extrapolate')
+        y_cub = np.clip(f_cub(new_x), 0, None)
+        y_cub /= (y_cub.max() + 1e-8)
+
+        axes[i, 0].plot(new_x, y_lin, color='steelblue')
+        axes[i, 0].set_title(f"Spectrum {i} — Linear")
+        axes[i, 0].set_xlabel("Wavenumber (cm⁻¹)")
+        axes[i, 0].set_ylabel("Normalised intensity")
+
+        axes[i, 1].plot(new_x, y_cub, color='darkorange')
+        axes[i, 1].set_title(f"Spectrum {i} — Cubic")
+        axes[i, 1].set_xlabel("Wavenumber (cm⁻¹)")
+        axes[i, 1].set_ylabel("Normalised intensity")
+
+    plt.tight_layout()
+    plt.savefig('outputs/standardised_comparison.png', dpi=150, bbox_inches='tight')
+    plt.show()
 
 def augment_shift(spectrum):
     intensity = spectrum[:, 0].copy() # again, the shape is (target_length, 1)
@@ -85,7 +113,9 @@ def augment_linear_combinations(spectra_for_class, n_combinations):
     
     return augmented
 
-def build_augmented_dataset(x_train, y_train_labels, n_combination):
+def build_augmented_dataset(x_train, y_train_labels, n_shift, n_noise, n_combination):
+    original_x      = list(x_train)
+    original_y      = list(y_train_labels)
     augmented_x = []
     augmented_y = []
 
@@ -97,14 +127,39 @@ def build_augmented_dataset(x_train, y_train_labels, n_combination):
             class_spectra[label] = []
         class_spectra[label].append(spectrum)
 
-    for label, spectra_list in class_spectra.items():            
+    for label, spectra_list in class_spectra.items():
+
+        for spectrum in spectra_list:
+
+            # shift augmentation on originals only
+            for _ in range(n_shift):
+                augmented_x.append(augment_shift(spectrum))
+                augmented_y.append(label)
+
+            # noise augmentation on originals only
+            for _ in range(n_noise):
+                augmented_x.append(augment_noise(spectrum))
+                augmented_y.append(label)
+
         # augment by linear combinations
         combos = augment_linear_combinations(spectra_list, n_combination)
         for combo in combos:
             augmented_x.append(combo)
             augmented_y.append(label)
     
-    return np.array(augmented_x), np.array(augmented_y)
+    # originals + augmented, never augmenting augmented data
+    x_all = np.array(original_x + augmented_x)
+    y_all = np.array(original_y + augmented_y)
+
+    print(f"Original samples:            {len(original_x)}")
+    print(f"Shift augmented:             {sum(1 for _ in range(n_shift)) * len(x_train)}")
+    print(f"Noise augmented:             {sum(1 for _ in range(n_noise)) * len(x_train)}")
+    print(f"Linear combinations:         {len(augmented_x) - n_shift * len(x_train) - n_noise * len(x_train)}")
+    print(f"Total augmented samples:     {len(augmented_x)}")
+    print(f"Total samples:               {len(x_all)}")
+    print(f"Augmentation multiplier:     {len(x_all) / len(original_x):.1f}x")
+
+    return x_all, y_all
 
 def leave_one_out_split(y_data):
     # since dictionary can not hold duplicate keys, use that to hold index
@@ -126,9 +181,9 @@ def leave_one_out_split(y_data):
     return np.array(train_index), np.array(test_index)
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, x, y, num_classes, batch_size, shuffle=True, augment=True):
+    def __init__(self, x, y, num_classes, input_size, batch_size, shuffle=True, augment=True):
         # hard coded
-        self.dim = [913]
+        self.dim = [input_size]
         self.n_channels = 1 # only intensity
 
         self.x = x

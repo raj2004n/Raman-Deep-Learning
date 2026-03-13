@@ -34,7 +34,7 @@ y_test_labels = y_data[test_index]
 
 y_test = to_categorical(le.transform(y_test_labels), num_classes)
 
-with open("artifacts/encoders/label_encoder_poor2.pkl", "wb") as f:
+with open("artifacts/encoders/label_encoder_poor3.pkl", "wb") as f:
     pickle.dump(le, f)
 
 spectra_train = [spectra_list[i] for i in train_index]
@@ -100,8 +100,8 @@ history = model.fit(
     )
 
 # save full model and wavenumber range
-model.save("artifacts/models/raman_cnn_model_poor2.keras")
-model.save_weights("artifacts/weights/test_weights_poor2.weights.h5")
-np.save("artifacts/metadata/wavenumber_range_poor2.npy", np.array([x_min, x_max]))
+model.save("artifacts/models/raman_cnn_model_poor3.keras")
+model.save_weights("artifacts/weights/test_weights_poor3.weights.h5")
+np.save("artifacts/metadata/wavenumber_range_poor3.npy", np.array([x_min, x_max]))
 
 show_results(history, model, x_test, y_test)

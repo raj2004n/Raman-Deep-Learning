@@ -35,7 +35,7 @@ def CNN_Model(num_classes, input_size):
     
     x = Dense(units=2048, activation='tanh', kernel_initializer=initializer)(x)
     x = BatchNormalization()(x)
-    x = Dropout(rate = 0.5)(x)
+    x = Dropout(rate = 0.8)(x)
     
     x = Dense(units=num_classes, kernel_initializer=initializer)(x)
     x = BatchNormalization()(x)

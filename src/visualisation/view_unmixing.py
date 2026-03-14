@@ -1,8 +1,10 @@
 import ramanspy as rp
 import matplotlib.pyplot as plt
+from theme import apply_theme, BG, FG, GRID, ACCENT
 from src.analysis.endmember_estimator import estimate_endmembers
 
 def show_unmixing_viewer(hsi_cube, n_endmembers, start=None, end=None):
+    apply_theme()   
     # crop
     if start is not None or end is not None:
         cropper = rp.preprocessing.misc.Cropper(region=(start, end))

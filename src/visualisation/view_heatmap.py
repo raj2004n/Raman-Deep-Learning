@@ -1,8 +1,10 @@
 import numpy as np
+from numba import njit
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
-from matplotlib.widgets import Slider, TextBox, RangeSlider
+from theme import apply_theme, BG, FG, GRID, ACCENT
+from matplotlib.widgets import Slider, TextBox, RangeSlider, Button
 
 def _apply_intensity_mask(image, i_min, i_max):
     """Applies intensity mask and greys out values outside the range.
@@ -15,94 +17,122 @@ def _apply_intensity_mask(image, i_min, i_max):
     Returns:
         _type_: Masked image.
     """
-    cmap = plt.get_cmap("viridis")
+    
+    cmap = plt.get_cmap("magma")
     norm = Normalize(vmin=i_min, vmax=i_max, clip=True)
     rgba = cmap(norm(image))
 
-    # mask pixels out the intensity range to grey
     outside = (image < i_min) | (image > i_max)
-    rgba[outside] = np.array([0.5, 0.5, 0.5, 1.0])
+    rgba[outside] = [0.15,0.15,0.18,1]
     return rgba
 
-#TODO: better name than area cube come on
-#TODO: option to use ln scaler, or no scaler
 def show_hsi_viewer(auc_cube, spectra_list, raman_shift, idx_step, pixel_map, x, y):
-    fig, (ax_image, ax_spectrum, ax_spectrum_log) = plt.subplots(3, 1, figsize=(10, 13), squeeze=True, gridspec_kw={"height_ratios": [4, 2, 2]})
-    fig.subplots_adjust(left=0.12, right=0.88, top=0.95, bottom=0.18, hspace=0.45)
+    apply_theme()
+    # mutable state for scale mode
+    state = {"ln_scale": False}
 
-    # axes for widgets
-    ax_slider = fig.add_axes([0.12, 0.10, 0.55, 0.02])
-    ax_box = fig.add_axes([0.78, 0.10, 0.10, 0.02])
-    ax_intensity_range = fig.add_axes([0.12, 0.05, 0.72, 0.02])
+    fig = plt.figure(figsize=(14, 10))
+    fig.patch.set_facecolor(BG)
+    
+    # left
+    ax_image        = fig.add_axes([0.09, 0.56, 0.65, 0.40])
+    ax_spectrum     = fig.add_axes([0.09, 0.33, 0.65, 0.18])
+    ax_ln_spectrum  = fig.add_axes([0.09, 0.07, 0.65, 0.18])
+
+    # bottom
+    ax_slider = fig.add_axes([0.09, 0.01, 0.65, 0.035])
+
+    # right
+    ax_intensity_slider = fig.add_axes([0.8, 0.32, 0.035, 0.63])
+    ax_button           = fig.add_axes([0.8, 0.22, 0.16, 0.06])
+    ax_box              = fig.add_axes([0.8, 0.14, 0.16, 0.05])
+
     ax_image.set_title("Raman Image")
-
     ax_image.set_axis_off()
     ax_spectrum.set_title("Intensity Spectra")
     ax_spectrum.set_xlabel(r"Raman Shift cm$^{-1}$")
     ax_spectrum.set_ylabel("Intensity")
-    ax_spectrum_log.set_title("Intensity Spectra (ln scale)")
-    ax_spectrum_log.set_xlabel(r"Raman Shift cm$^{-1}$")
-    ax_spectrum_log.set_ylabel("ln(Intensity)")
+    ax_ln_spectrum.set_title("Intensity Spectra (ln scale)")
+    ax_ln_spectrum.set_xlabel(r"Raman Shift cm$^{-1}$")
+    ax_ln_spectrum.set_ylabel("ln(Intensity)")
 
-    # colourbar range from full data — log scaled
     i_min, i_max = np.min(auc_cube), np.max(auc_cube)
-
+    for ax in fig.axes:
+        ax.set_facecolor((1,0,0,0.05))
     correction = abs(min(i_min, 0))
     if correction > 0:
         print(f"Intensity correction applied: +{correction:.4f} to shift all values positive")
-    
-    auc_cube_corrected = auc_cube + correction + 1e-10 # to aviod ln(0)
-    i_min_corrected = np.min(auc_cube_corrected)
-    i_max_corrected = np.max(auc_cube_corrected)
 
-    log_v_min = np.log(i_min_corrected)
-    log_v_max = np.log(i_max_corrected)
+    auc_cube_corrected  = auc_cube + correction + 1e-10
+    log_v_min           = np.log(np.min(auc_cube_corrected))
+    log_v_max           = np.log(np.max(auc_cube_corrected))
 
-    # initial heatmap and spectrums
+    # initial heatmap and spectra
     image                   = ax_image.imshow(_apply_intensity_mask(auc_cube[:, :, 0], i_min, i_max), aspect="equal", origin="upper")
     first_spectrum          = spectra_list[pixel_map[0, 0]]
-    (pixel_spectrum,)       = ax_spectrum.plot(raman_shift, first_spectrum)
-    (pixel_spectrum_log,)   = ax_spectrum_log.plot(raman_shift, np.log(first_spectrum + correction))
+    (pixel_spectrum,)       = ax_spectrum.plot(raman_shift, first_spectrum, color=ACCENT)
+    (pixel_ln_spectrum,)    = ax_ln_spectrum.plot(raman_shift, np.log(np.maximum(first_spectrum + correction + 1e-10, 1e-10)), color=ACCENT)
 
-    # detached ScalarMappable drives the colorbar independently of the RGBA image
-    scalar_mappable = cm.ScalarMappable(norm=Normalize(i_min, i_max), cmap="viridis")    
+    scalar_mappable = cm.ScalarMappable(norm=Normalize(i_min, i_max), cmap="magma")
     scalar_mappable.set_array([])
-
     cbar = fig.colorbar(scalar_mappable, ax=ax_image)
     cbar.set_ticks(np.linspace(i_min, i_max, 5))
+    cbar.ax.yaxis.set_tick_params(color=FG, labelsize=8)
+    plt.setp(cbar.ax.yaxis.get_ticklabels(), color=FG)
 
     raman_shift_arr = np.array(raman_shift)
     indices = np.arange(auc_cube.shape[-1])
 
-    # widgets
     rolling_window = Slider(
         ax=ax_slider, label="Raman Shift",
         valmin=0, valmax=indices[-1],
         valinit=0, valstep=indices
     )
-    rolling_window.valtext.set_text(str(raman_shift[0]))
+    rolling_window.label.set_color(FG)
+    rolling_window.valtext.set_color(FG)
+    rolling_window.valtext.set_text(f"{raman_shift[0]:.0f} cm⁻¹")
+    ax_slider.set_facecolor(GRID)
 
-    intensity_range = RangeSlider(
-        ax=ax_intensity_range, label="ln(Intensity)",
-        valmin=log_v_min, valmax=log_v_max,
-        valinit=(log_v_min, log_v_max)
+    # start slider in normal scale
+    intensity_slider = RangeSlider(
+        ax=ax_intensity_slider, label="Intensity",
+        valmin=i_min, valmax=i_max,
+        valinit=(i_min, i_max),
+        orientation="vertical"
     )
+    intensity_slider.label.set_color(FG)
+    intensity_slider.valtext.set_color(FG)
+    ax_intensity_slider.set_facecolor(GRID)
 
-    text_box = TextBox(ax_box, "Pixel:", textalignment="center")
-    text_box.set_val(str(130))
+    scale_button = Button(ax_button, "Switch to ln scale", color=GRID, hovercolor=BG)
+    scale_button.label.set_color(FG)
+    scale_button.label.set_fontsize(8)
 
-    # lines on spectrum indicating region rolling window being viewed on image
-    lower_limit_line        = ax_spectrum.axvline(raman_shift_arr[0], color="red", linestyle="--", alpha=0.7)
-    upper_limit_line        = ax_spectrum.axvline(raman_shift_arr[idx_step], color="red", linestyle="--", alpha=0.7)
-    lower_limit_line_log    = ax_spectrum_log.axvline(raman_shift_arr[0], color="red", linestyle="--", alpha=0.7)
-    upper_limit_line_log    = ax_spectrum_log.axvline(raman_shift_arr[idx_step], color="red", linestyle="--", alpha=0.7)
+    text_box = TextBox(ax_box, "Pixel:", textalignment="center", color=GRID, hovercolor=GRID)
+    text_box.label.set_color(FG)
+    text_box.text_disp.set_color(FG)
+    text_box.set_val(str(pixel_map[0, 0]))
 
-    # pixel label shown on hover
+    lower_limit_line    = ax_spectrum.axvline(raman_shift_arr[0], color="#E07B54", linestyle="--", alpha=0.7)
+    upper_limit_line    = ax_spectrum.axvline(raman_shift_arr[idx_step], color="#E07B54", linestyle="--", alpha=0.7)
+    lower_ln_limit_line = ax_ln_spectrum.axvline(raman_shift_arr[0], color="#E07B54", linestyle="--", alpha=0.7)
+    upper_ln_limit_line = ax_ln_spectrum.axvline(raman_shift_arr[idx_step], color="#E07B54", linestyle="--", alpha=0.7)
+
     hover_text = ax_image.text(
         0.01, 0.99, "", transform=ax_image.transAxes,
-        va="top", ha="left", color="white", fontsize=9,
-        bbox=dict(boxstyle="round,pad=0.2", facecolor="black", alpha=0.5),
+        va="top", ha="left", color=FG, fontsize=8,
+        bbox=dict(boxstyle="round,pad=0.2", facecolor=GRID, edgecolor=FG, alpha=0.85),
     )
+    
+    fig.canvas.draw()
+    background = fig.canvas.copy_from_bbox(fig.bbox)
+
+    def _get_image_range():
+        """Returns (i_min, i_max) in original scale regardless of slider mode."""
+        v_min, v_max = intensity_slider.val
+        if state["ln_scale"]:
+            return np.exp(v_min) - correction, np.exp(v_max) - correction
+        return v_min, v_max
 
     def update(_val):
         index = int(rolling_window.val)
@@ -111,68 +141,99 @@ def show_hsi_viewer(auc_cube, spectra_list, raman_shift, idx_step, pixel_map, x,
         except (ValueError, KeyError):
             return
 
-        # get intensity range and convert to normal scale
-        log_i_min, log_i_max = intensity_range.val
-        i_min = np.exp(log_i_min) - correction  # convert back to original scale for mask
-        i_max = np.exp(log_i_max) - correction
-        
-        # update image, cbar, pixel spectrums
-        image.set_data(_apply_intensity_mask(auc_cube[:, :, index], i_min, i_max))
+        i_min_cur, i_max_cur = _get_image_range()
 
-        scalar_mappable.set_clim(i_min, i_max)
-        cbar.set_ticks(np.linspace(i_min, i_max, 5))
+        image.set_data(_apply_intensity_mask(auc_cube[:, :, index], i_min_cur, i_max_cur))
+        scalar_mappable.set_clim(i_min_cur, i_max_cur)
+        cbar.set_ticks(np.linspace(i_min_cur, i_max_cur, 5))
         cbar.update_normal(scalar_mappable)
 
         spectrum = spectra_list[pixel]
         pixel_spectrum.set_ydata(spectrum)
-        pixel_spectrum_log.set_ydata(np.log(spectrum + correction + 1e-10))
+        pixel_ln_spectrum.set_ydata(np.log(np.maximum(spectrum + correction + 1e-10, 1e-10)))
 
         x_start = raman_shift_arr[index]
         x_end   = raman_shift_arr[index + idx_step - 1]
-
-        for line in [lower_limit_line, lower_limit_line_log]:
+        for line in [lower_limit_line, lower_ln_limit_line]:
             line.set_xdata([x_start, x_start])
-        for line in [upper_limit_line, upper_limit_line_log]:
+        for line in [upper_limit_line, upper_ln_limit_line]:
             line.set_xdata([x_end, x_end])
-        rolling_window.valtext.set_text(f"{x_start:.0f}-{x_end:.0f}")
-
+        rolling_window.valtext.set_text(f"{x_start:.0f}-{x_end:.0f} cm⁻¹")
+        
         ax_spectrum.relim()
         ax_spectrum.autoscale_view()
-        ax_spectrum_log.relim()
-        ax_spectrum_log.autoscale_view()
+        ax_ln_spectrum.relim()
+        ax_ln_spectrum.autoscale_view()
+
+        # recapture background after limit changes, then blit
+        fig.canvas.restore_region(background)
+        for ax in [ax_image, ax_spectrum, ax_ln_spectrum]:
+            ax.redraw_in_frame()
+        fig.canvas.blit(fig.bbox)
+
+    def on_resize(_event):
+        nonlocal background
+        fig.canvas.draw()
+        background = fig.canvas.copy_from_bbox(fig.bbox)
+
+    fig.canvas.mpl_connect("resize_event", on_resize)
+
+    def on_scale_toggle(_event):
+        v_min_cur, v_max_cur = intensity_slider.val
+        state["ln_scale"] = not state["ln_scale"]
+
+        if state["ln_scale"]:
+            new_min = np.log(max(v_min_cur + correction + 1e-10, 1e-10))
+            new_max = np.log(max(v_max_cur + correction + 1e-10, 1e-10))
+            intensity_slider.ax.set_ylim(log_v_min, log_v_max)
+            intensity_slider.valmin = log_v_min
+            intensity_slider.valmax = log_v_max
+            intensity_slider.label.set_text("ln(Intensity)")
+            scale_button.label.set_text("Switch to standard scale")
+        else:
+            new_min = np.exp(v_min_cur) - correction
+            new_max = np.exp(v_max_cur) - correction
+            intensity_slider.ax.set_ylim(i_min, i_max)
+            intensity_slider.valmin = i_min
+            intensity_slider.valmax = i_max
+            intensity_slider.label.set_text("Intensity")
+            scale_button.label.set_text("Switch to ln scale")
+
+        intensity_slider.set_val((new_min, new_max))
         fig.canvas.draw_idle()
 
     def on_hover(event):
+        new_text = ""
         if event.inaxes == ax_image:
             col = np.clip(int(event.xdata + 0.5), 0, y - 1)
             row = np.clip(int(event.ydata + 0.5), 0, x - 1)
-            hover_text.set_text(f"Pixel {pixel_map[row, col]}")
-        else:
-            hover_text.set_text("")
-        fig.canvas.draw_idle()
+            new_text = f"Pixel {pixel_map[row, col]}"
+        if hover_text.get_text() != new_text:
+            hover_text.set_text(new_text)
+            fig.canvas.draw_idle()
 
     def on_click(event):
         if event.inaxes != ax_image or not event.dblclick:
             return
-        col   = np.clip(int(event.xdata + 0.5), 0, y - 1)
-        row   = np.clip(int(event.ydata + 0.5), 0, x - 1)
-        pixel = pixel_map[row, col]
+        col     = np.clip(int(event.xdata + 0.5), 0, y - 1)
+        row     = np.clip(int(event.ydata + 0.5), 0, x - 1)
+        pixel   = pixel_map[row, col]
         text_box.set_val(str(pixel))
 
         spectrum = spectra_list[pixel]
         pixel_spectrum.set_ydata(spectrum)
-        pixel_spectrum_log.set_ydata(np.log(spectrum + correction + 1e-10))
+        pixel_ln_spectrum.set_ydata(np.log(np.maximum(spectrum + correction + 1e-10, 1e-10)))
 
         ax_spectrum.relim()
         ax_spectrum.autoscale_view()
-        ax_spectrum_log.relim()
-        ax_spectrum_log.autoscale_view()
+        ax_ln_spectrum.relim()
+        ax_ln_spectrum.autoscale_view()
         fig.canvas.draw_idle()
 
-    # wire up callbacks
     text_box.on_submit(update)
     rolling_window.on_changed(update)
-    intensity_range.on_changed(update)
+    intensity_slider.on_changed(update)
+    scale_button.on_clicked(on_scale_toggle)
     fig.canvas.mpl_connect("motion_notify_event", on_hover)
     fig.canvas.mpl_connect("button_press_event", on_click)
 

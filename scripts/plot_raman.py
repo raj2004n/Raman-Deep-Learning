@@ -1,4 +1,6 @@
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 from src.data.loader import *
 from src.visualisation.view_heatmap import show_hsi_viewer
 from src.visualisation.view_unmixing import show_unmixing_viewer
@@ -47,19 +49,9 @@ HELP_TEXT = {
           - Baseline correction (polynomial fitting, order=3)
           - Normalisation (Vector)
 
-    4 - B:  Basic protocol approximating Bergholt et al. (2016) [2].
-        Steps:
-          - Cosmic ray removal (Whitaker-Hayes algorithm)
-          - Baseline correction (polynomial fitting, order=2, range=700-3600 cm⁻¹)
-          - Spectral crop to fingerprint region (700-1800 cm⁻¹)
-          - Normalisation (Unit vector, pixelwise)
-
   References:
     [1] Georgiev et al. (2023). RamanSPy: An open-source Python package for integrative
         Raman spectroscopy data analysis. arXiv:2307.13650.
-    [2] Bergholt et al. (2016). Raman spectroscopy reveals new insights into the zonal
-        organization of native and tissue-engineered articular cartilage.
-        ACS Central Science, 2(12), 885-895.
 
   ROLLING WINDOW WIDTH: Viewing window in cm⁻¹ (e.g. 1.0).
   START / END: Wavenumber range to plot in cm⁻¹. Press Enter to use full range.
@@ -86,7 +78,7 @@ def _input(prompt_str=""):
 
 def prompt_args():
     print("\nEnter path, grid rows and grid columns (or '?' for help):")
-    print("e.g. ~/Data/SB008 10 13")
+    print("e.g. ~/Code/Data_SH/SB008 10 13")
     while True:
         raw = _input("> ")
         if raw == "?":
@@ -151,15 +143,15 @@ def prompt_mode():
         print("Invalid choice, please enter 1, 2, or 3.")
 
 def prompt_heatmap_args():
-    print("\nPipeline? [0] None  [1] P1  [2] P2  [3] P3 [4] B (default: 0, or '?' for help)")
+    print("\nPipeline? [0] None  [1] P1  [2] P2  [3] P3 (default: 0, or '?' for help)")
     while True:
         pipeline_id = _input("> ") or "0"
         if pipeline_id == "?":
             print(HELP_TEXT["heatmap"])
             continue
-        if pipeline_id in ("0", "1", "2", "3", "4"):
+        if pipeline_id in ("0", "1", "2", "3"):
             break
-        print("Please enter 0, 1, 2, 3, or 4.")
+        print("Please enter 0, 1, 2, or 3.")
 
     print("\nRolling window width in cm⁻¹ (default: 1, or '?' for help)")
     while True:

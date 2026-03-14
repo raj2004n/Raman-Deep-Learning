@@ -2,9 +2,8 @@ import os
 import numpy as np
 import pandas as pd
 import ramanspy as rp
-from scipy.signal import convolve
 from .grid import RamanGrid
-
+from scipy.signal import convolve
 
 def load_CNN_data(path="~/Code/Data_SH/poor_unoriented"):
     """Loads Raman Spectra dataset from RRUFF for training the CNN model.
@@ -41,8 +40,6 @@ def build_pipeline(pipeline_id, normalisation_pixelwise=True, fingerprint=False)
         return rp.preprocessing.protocols.georgiev2023_P2(normalisation_pixelwise, fingerprint)
     elif pipeline_id == 3:
         return rp.preprocessing.protocols.georgiev2023_P3(normalisation_pixelwise, fingerprint)
-    elif pipeline_id ==4:
-        return rp.preprocessing.protocols.bergholt2016()
     else:
         raise ValueError(f"Unknown pipeline id: {pipeline_id}")
     

@@ -1,12 +1,10 @@
 import numpy as np
-import ramanspy as rp
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.widgets import Slider, TextBox, RangeSlider
-from src.analysis.endmember_estimator import estimate_endmembers
 
-def apply_intensity_mask(image, i_min, i_max):
+def _apply_intensity_mask(image, i_min, i_max):
     """Applies intensity mask and greys out values outside the range.
 
     Args:
@@ -28,7 +26,7 @@ def apply_intensity_mask(image, i_min, i_max):
 
 #TODO: better name than area cube come on
 #TODO: option to use ln scaler, or no scaler
-def show_hsi_viewer(area_cube, spectra_list, raman_shift, idx_step, pixel_map, x, y):
+def show_hsi_viewer(auc_cube, spectra_list, raman_shift, idx_step, pixel_map, x, y):
     fig, (ax_image, ax_spectrum, ax_spectrum_log) = plt.subplots(3, 1, figsize=(10, 13), squeeze=True, gridspec_kw={"height_ratios": [4, 2, 2]})
     fig.subplots_adjust(left=0.12, right=0.88, top=0.95, bottom=0.18, hspace=0.45)
 
@@ -47,21 +45,21 @@ def show_hsi_viewer(area_cube, spectra_list, raman_shift, idx_step, pixel_map, x
     ax_spectrum_log.set_ylabel("ln(Intensity)")
 
     # colourbar range from full data — log scaled
-    i_min, i_max = np.min(area_cube), np.max(area_cube)
+    i_min, i_max = np.min(auc_cube), np.max(auc_cube)
 
     correction = abs(min(i_min, 0))
     if correction > 0:
         print(f"Intensity correction applied: +{correction:.4f} to shift all values positive")
     
-    area_cube_corrected = area_cube + correction + 1e-10 # to aviod ln(0)
-    i_min_corrected = np.min(area_cube_corrected)
-    i_max_corrected = np.max(area_cube_corrected)
+    auc_cube_corrected = auc_cube + correction + 1e-10 # to aviod ln(0)
+    i_min_corrected = np.min(auc_cube_corrected)
+    i_max_corrected = np.max(auc_cube_corrected)
 
     log_v_min = np.log(i_min_corrected)
     log_v_max = np.log(i_max_corrected)
 
     # initial heatmap and spectrums
-    image                   = ax_image.imshow(apply_intensity_mask(area_cube[:, :, 0], i_min, i_max), aspect="equal", origin="upper")
+    image                   = ax_image.imshow(_apply_intensity_mask(auc_cube[:, :, 0], i_min, i_max), aspect="equal", origin="upper")
     first_spectrum          = spectra_list[pixel_map[0, 0]]
     (pixel_spectrum,)       = ax_spectrum.plot(raman_shift, first_spectrum)
     (pixel_spectrum_log,)   = ax_spectrum_log.plot(raman_shift, np.log(first_spectrum + correction))
@@ -74,7 +72,7 @@ def show_hsi_viewer(area_cube, spectra_list, raman_shift, idx_step, pixel_map, x
     cbar.set_ticks(np.linspace(i_min, i_max, 5))
 
     raman_shift_arr = np.array(raman_shift)
-    indices = np.arange(area_cube.shape[-1])
+    indices = np.arange(auc_cube.shape[-1])
 
     # widgets
     rolling_window = Slider(
@@ -119,7 +117,7 @@ def show_hsi_viewer(area_cube, spectra_list, raman_shift, idx_step, pixel_map, x
         i_max = np.exp(log_i_max) - correction
         
         # update image, cbar, pixel spectrums
-        image.set_data(apply_intensity_mask(area_cube[:, :, index], i_min, i_max))
+        image.set_data(_apply_intensity_mask(auc_cube[:, :, index], i_min, i_max))
 
         scalar_mappable.set_clim(i_min, i_max)
         cbar.set_ticks(np.linspace(i_min, i_max, 5))
@@ -177,123 +175,5 @@ def show_hsi_viewer(area_cube, spectra_list, raman_shift, idx_step, pixel_map, x
     intensity_range.on_changed(update)
     fig.canvas.mpl_connect("motion_notify_event", on_hover)
     fig.canvas.mpl_connect("button_press_event", on_click)
-
-    plt.show()
-
-def show_unmixing_viewer(hsi_cube, n_endmembers, start=None, end=None):
-    # crop
-    if start is not None or end is not None:
-        cropper = rp.preprocessing.misc.Cropper(region=(start, end))
-        hsi_cube = cropper.apply(hsi_cube)
-
-    # estimate number of endmembers if requested
-    if n_endmembers == -1:
-        n_endmembers, confidence = estimate_endmembers(hsi_cube)
-        print(f"Estimated {n_endmembers} endmembers with {confidence} confidence.")
-    
-    nfindr = rp.analysis.unmix.NFINDR(n_endmembers=n_endmembers, abundance_method='fcls')
-    abundance_maps, endmembers = nfindr.apply(hsi_cube)
-
-    # plot endmember spectra
-    rp.plot.spectra(
-        endmembers, hsi_cube.spectral_axis,
-        plot_type="single stacked",
-        label=[f"Endmember {i + 1}" for i in range(len(endmembers))]
-    )
-    plt.show()
-
-    # plot abundance maps
-    rp.plot.image(
-        abundance_maps,
-        title=[f"Component {i + 1}" for i in range(len(abundance_maps))]
-    )
-    plt.show()
-    
-def show_prediction_map(predicted_labels_map, predicted_top5_map, confidence_threshold=0.70, save_path=None):
-    length, width = predicted_labels_map.shape
-
-    # build confidence map from top-1 probability
-    confidence_map = np.array([
-        [predicted_top5_map[r, c][0][1] for c in range(width)]
-        for r in range(length)
-    ])
-
-    # mask low confidence pixels as 'Unknown'
-    masked_labels = predicted_labels_map.copy()
-    masked_labels[confidence_map < confidence_threshold] = 'Unknown'
-
-    # map mineral names to integers for colouring
-    unique_minerals = sorted([m for m in np.unique(masked_labels) if m != 'Unknown'])
-    if 'Unknown' in np.unique(masked_labels):
-        unique_minerals = unique_minerals + ['Unknown']
-
-    mineral_to_int = {m: i for i, m in enumerate(unique_minerals)}
-    label_map = np.vectorize(mineral_to_int.get)(masked_labels)
-
-    n_minerals = len(unique_minerals)
-    colors = [plt.get_cmap('tab20')(i / max(n_minerals - 1, 1)) for i in range(n_minerals)]
-    if 'Unknown' in unique_minerals:
-        colors[-1] = (0.6, 0.6, 0.6, 1.0)
-
-    from matplotlib.colors import ListedColormap
-    from matplotlib.patches import Patch
-    cmap = ListedColormap(colors)
-
-    fig, ax = plt.subplots(figsize=(12, 8))
-    ax.imshow(label_map, cmap=cmap, vmin=0, vmax=n_minerals - 1)
-    ax.set_axis_off()
-    ax.set_title(f"Mineral Prediction Map (confidence threshold: {confidence_threshold*100:.0f}%)")
-
-    # legend
-    legend_elements = [
-        Patch(facecolor=colors[i], label=mineral)
-        for i, mineral in enumerate(unique_minerals)
-    ]
-    ax.legend(
-        handles=legend_elements,
-        bbox_to_anchor=(1.05, 1),
-        loc='upper left',
-        fontsize=8,
-        title="Minerals",
-        title_fontsize=9,
-        framealpha=0.9
-    )
-
-    # hover annotation
-    annot = ax.annotate(
-        "", xy=(0, 0), xytext=(10, 10),
-        textcoords="offset points",
-        bbox=dict(boxstyle="round", fc="white", alpha=0.9),
-        fontsize=8
-    )
-    annot.set_visible(False)
-
-    def on_hover(event):
-        if event.inaxes == ax:
-            col = int(round(event.xdata))
-            row = int(round(event.ydata))
-            if 0 <= row < length and 0 <= col < width:
-                conf = confidence_map[row, col]
-                if conf < confidence_threshold:
-                    lines = [f"Pixel ({row}, {col})", "", "Unknown", f"Confidence: {conf*100:.1f}% (below threshold)"]
-                else:
-                    top5 = predicted_top5_map[row, col]
-                    lines = [f"Pixel ({row}, {col})", ""]
-                    for rank, (label, prob) in enumerate(top5[:5], 1):
-                        lines.append(f"{rank}. {label}: {prob*100:.1f}%")
-                annot.xy = (event.xdata, event.ydata)
-                annot.set_text("\n".join(lines))
-                annot.set_visible(True)
-            else:
-                annot.set_visible(False)
-        else:
-            annot.set_visible(False)
-        fig.canvas.draw_idle()
-
-    fig.canvas.mpl_connect("motion_notify_event", on_hover)
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
 
     plt.show()

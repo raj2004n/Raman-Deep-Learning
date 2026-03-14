@@ -1,7 +1,5 @@
-from data.raman_helper import *
-from matplotlib.widgets import TextBox
+from notebooks.raman_helper import *
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 
 path = Path("~/Code/Data_SH/SB008").expanduser()
 raman_data = Raman_Data(path, 10, 13)

@@ -1,6 +1,5 @@
 import os
 import ramanspy as rp
-import numpy as np
 
 base_path = os.path.expanduser('~/Code/Data_SH')
 

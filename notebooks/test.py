@@ -1,8 +1,7 @@
 """
 Space to test pysptools. Focusign on Hysime
 """
-from data.raman_helper import *
-import pysptools
+from notebooks.raman_helper import *
 from pysptools import material_count
 # load data
 path = Path("~/Code/Data_SH/SB008").expanduser()

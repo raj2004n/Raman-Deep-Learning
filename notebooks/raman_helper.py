@@ -3,8 +3,6 @@ import re
 import numpy as np
 import pandas as pd
 import ramanspy as rp
-import matplotlib
-import matplotlib.pyplot as plt
 from scipy.signal import convolve
 
 class Raman_Data:
@@ -194,7 +192,7 @@ class Raman_Data:
         Method to find the area under the curve by regions.
         
         Returns:
-        area_cube - holds integrals of each possible rolling window region, stored as: list, shape=(x, y, band length) 
+        auc_cube - holds integrals of each possible rolling window region, stored as: list, shape=(x, y, band length) 
         spectra_of_pixel - holds spectra of each pixel, stored as: list, shape=(number of pixels, band length)
         pixel_map - holds positions of pixels
 
@@ -235,12 +233,12 @@ class Raman_Data:
         else:# range is less than the mean step
             idx_step = 1 # min step
 
-        kernel = np.ones(idx_step)
-        kernel[0] = 0.5
-        kernel[-1] = 0.5
-        kernel = kernel * mean_step
+        auc_kernel = np.ones(idx_step)
+        auc_kernel[0] = 0.5
+        auc_kernel[-1] = 0.5
+        auc_kernel = auc_kernel * mean_step
 
-        area_cube = np.zeros(shape=(self.x, self.y, len(cropped_raman_shifts) - idx_step + 1))
+        auc_cube = np.zeros(shape=(self.x, self.y, len(cropped_raman_shifts) - idx_step + 1))
         spectra_of_pixel = np.zeros(shape=(self.x * self.y + 1, len(cropped_raman_shifts)))
         pixel_map = np.zeros(shape=(self.x, self.y), dtype=int)
         
@@ -261,7 +259,7 @@ class Raman_Data:
 
             areas = convolve(preprocessed_data, kernel, mode='valid')
 
-            area_cube[cur_x, cur_y, :] = areas
+            auc_cube[cur_x, cur_y, :] = areas
 
             # add spectra to pixel
             spectra_of_pixel[pixel] = preprocessed_data
@@ -273,7 +271,7 @@ class Raman_Data:
             # move to next pixel
             pixel += 1
         
-        return area_cube, spectra_of_pixel, cropped_raman_shifts, idx_step, pixel_map
+        return auc_cube, spectra_of_pixel, cropped_raman_shifts, idx_step, pixel_map
 
     def get_raw_hsi_cube(self, spectra_start=None, spectra_end=None):
         # get files

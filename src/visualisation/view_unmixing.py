@@ -3,7 +3,7 @@ import numpy as np
 import ramanspy as rp
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-from theme import apply_theme, BG, FG, GRID, ACCENT
+from .theme import apply_theme, BG, FG, GRID, ACCENT
 from src.analysis.endmember_estimator import estimate_endmembers
 
 def show_unmixing_viewer(hsi_cube, n_endmembers, start=None, end=None):

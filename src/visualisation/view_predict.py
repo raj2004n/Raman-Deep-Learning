@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from src.cnn.predict import predict
 from matplotlib.patches import Patch
 from matplotlib.colors import ListedColormap
-from theme import apply_theme, BG, FG, GRID, ACCENT
+from .theme import apply_theme, BG, FG, GRID, ACCENT
 
 def show_prediction_map(path, x, y, confidence_threshold=0.80, save_path=None):
     apply_theme()

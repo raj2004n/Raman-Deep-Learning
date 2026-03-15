@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
-from theme import *
+from .theme import *
 from matplotlib.widgets import Slider, TextBox, RangeSlider, Button
 
 def _apply_intensity_mask(image, i_min, i_max):

@@ -165,7 +165,7 @@ def prompt_heatmap_args():
         except ValueError:
             print("Please enter a number (e.g. 1 or 25.5).")
 
-    print("\nCrop spectra start in cm⁻¹ (press Enter to skip, or '?' for help)")
+    print("\nStart of spectra in cm⁻¹ (press Enter to skip, or '?' for help)")
     while True:
         start = _input("> ") or None
         if start == "?":
@@ -177,7 +177,7 @@ def prompt_heatmap_args():
         except ValueError:
             print("Please enter a number or press Enter to skip.")
 
-    print("\nCrop spectra end in cm⁻¹ (press Enter to skip, or '?' for help)")
+    print("\nEnd of spectra in cm⁻¹ (press Enter to skip, or '?' for help)")
     while True:
         end = _input("> ") or None
         if end == "?":
@@ -209,7 +209,17 @@ def prompt_unmixing_args():
         except ValueError:
             print("Please enter an integer, or -1 to estimate automatically.")
 
-    print("\nStart of spectra region in cm⁻¹ (press Enter to skip, or '?' for help)")
+    print("\nPipeline? [0] None  [1] P1  [2] P2  [3] P3 (default: 0, or '?' for help)")
+    while True:
+        pipeline_id = _input("> ") or "0"
+        if pipeline_id == "?":
+            print(HELP_TEXT["heatmap"])
+            continue
+        if pipeline_id in ("0", "1", "2", "3"):
+            break
+        print("Please enter 0, 1, 2, or 3.")
+
+    print("\nStart of spectra in cm⁻¹ (press Enter to skip, or '?' for help)")
     while True:
         start = _input("> ") or None
         if start == "?":
@@ -221,7 +231,7 @@ def prompt_unmixing_args():
         except ValueError:
             print("Please enter a number or press Enter to skip.")
 
-    print("\nEnd of spectra region in cm⁻¹ (press Enter to skip, or '?' for help)")
+    print("\nEnd of spectra in cm⁻¹ (press Enter to skip, or '?' for help)")
     while True:
         end = _input("> ") or None
         if end == "?":
@@ -235,6 +245,7 @@ def prompt_unmixing_args():
 
     return {
         "end_members": end_members,
+        "pipeline_id" : int(pipeline_id),
         "start": start,
         "end": end,
     }
@@ -279,6 +290,9 @@ def main():
 
     elif mode == "unmixing":
         hsi_cube = get_raw_hsi_cube(path, x, y)
+        pipeline = build_pipeline(kwargs["pipeline_id"])
+        if pipeline is not None:
+            hsi_cube = pipeline.apply(hsi_cube)
         show_unmixing_viewer(hsi_cube, kwargs["end_members"], kwargs["start"], kwargs["end"])
 
     elif mode == "predict":

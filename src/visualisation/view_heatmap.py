@@ -5,18 +5,18 @@ from matplotlib.colors import Normalize
 from .theme import *
 from matplotlib.widgets import Slider, TextBox, RangeSlider, Button
 
+
 def _apply_intensity_mask(image, i_min, i_max):
     """Applies intensity mask and greys out values outside the range.
 
     Args:
-        image (_type_): Image 
-        i_min (_type_): Minimum intensity value
-        i_max (_type_): Maximum intensity value
+        image: 2D array of AUC values for a single band.
+        i_min: Minimum intensity value.
+        i_max: Maximum intensity value.
 
     Returns:
-        _type_: Masked image.
+        RGBA image array with out-of-range pixels greyed out.
     """
-    
     cmap = plt.get_cmap("magma")
     norm = Normalize(vmin=i_min, vmax=i_max, clip=True)
     rgba = cmap(norm(image))
@@ -25,26 +25,100 @@ def _apply_intensity_mask(image, i_min, i_max):
     rgba[outside] = [0.15, 0.15, 0.18, 1]
     return rgba
 
-def show_hsi_viewer(auc_cube, spectra_list, raman_shift, idx_step, pixel_map, x, y):
+
+def query_rolling_auc(cumulative_cube, raman_shift, window_width_cm):
+    spectral_axis = np.asarray(raman_shift) # as array for future operations
+    n = len(spectral_axis)
+    mean_step = np.mean(np.diff(spectral_axis))
+    idx_step = max(2, int(window_width_cm // mean_step)) # corresponds to window width in the units of index
+
+    # corresponds to the number of available shifts
+    n_bands = n - idx_step
+    if n_bands <= 0: # if <= 0 rolling window is too wide
+        raise ValueError(
+            f"Window width {window_width_cm:.1f} cm⁻¹ exceeds the spectral range "
+            f"({spectral_axis[-1] - spectral_axis[0]:.1f} cm⁻¹). Choose a smaller window."
+        )
+
+    # get area under cruve by subtracting the cumulative values
+    auc_cube = cumulative_cube[:, :, idx_step:] - cumulative_cube[:, :, :n_bands]
+
+    band_starts = spectral_axis[:n_bands]
+    band_ends   = spectral_axis[idx_step:]
+
+    return auc_cube, band_starts, band_ends, idx_step
+
+
+def show_hsi_viewer(cumulative_cube, spectra_list, raman_shift, pixel_map, x, y):
     apply_theme()
-    # mutable state for scale mode
-    state = {"ln_scale": False}
+
+    # set the initial window width to 10 cm
+    initial_window_width_cm = 10
+
+    raman_shift_arr = np.asarray(raman_shift)
+    spectral_range  = raman_shift_arr[-1] - raman_shift_arr[0]
+    mean_step       = float(np.mean(np.diff(raman_shift_arr))) 
+
+    # initialise the current state using a dicitonary (fast look up times)
+    state = {
+        "ln_scale":    False,
+        "auc_cube":    None,
+        "band_starts": None,
+        "band_ends":   None,
+        "idx_step":    None,
+        "i_min":       None,
+        "i_max":       None,
+        "correction":  None,
+        "log_v_min":   None,
+        "log_v_max":   None,
+    }
+
+    def _recompute_auc(window_width_cm):
+        auc_cube, band_starts, band_ends, idx_step = query_rolling_auc(
+            cumulative_cube, raman_shift_arr, window_width_cm
+        )
+        # update relevant states
+        state["auc_cube"]    = auc_cube
+        state["band_starts"] = band_starts
+        state["band_ends"]   = band_ends
+        state["idx_step"]    = idx_step
+
+        # update intensity slider min and max
+        i_min = float(np.min(auc_cube))
+        i_max = float(np.max(auc_cube))
+        
+        # re-compute the correction term based on the new width
+        correction = abs(min(i_min, 0))
+        auc_corrected = auc_cube + correction + 1e-10
+        state["i_min"]      = i_min
+        state["i_max"]      = i_max
+        state["correction"] = correction
+        state["log_v_min"]  = float(np.log(np.min(auc_corrected)))
+        state["log_v_max"]  = float(np.log(np.max(auc_corrected)))
+
+    _recompute_auc(initial_window_width_cm)
 
     fig = plt.figure(figsize=(14, 10))
     fig.patch.set_facecolor(BG)
-    
-    # left
-    ax_image        = fig.add_axes([0.09, 0.56, 0.65, 0.40])
-    ax_spectrum     = fig.add_axes([0.09, 0.33, 0.65, 0.18])
-    ax_ln_spectrum  = fig.add_axes([0.09, 0.07, 0.65, 0.18])
 
-    # bottom
-    ax_slider = fig.add_axes([0.09, 0.01, 0.65, 0.035])
+    # plots
+    ax_image       = fig.add_axes([0.09, 0.56, 0.65, 0.40])
+    ax_spectrum    = fig.add_axes([0.09, 0.33, 0.65, 0.18])
+    ax_ln_spectrum = fig.add_axes([0.09, 0.07, 0.65, 0.18])
 
-    # right
-    ax_intensity_slider = fig.add_axes([0.8, 0.32, 0.03, 0.63])
-    ax_button           = fig.add_axes([0.8, 0.22, 0.16, 0.06])
-    ax_box              = fig.add_axes([0.8, 0.14, 0.16, 0.05])
+    # raman shift slider
+    ax_pos_slider   = fig.add_axes([0.09, 0.015, 0.65, 0.030])
+    ax_width_slider = fig.add_axes([0.09, 0.052, 0.65, 0.030])
+
+    # intensity slider
+    ax_intensity_slider = fig.add_axes([0.80, 0.32, 0.03, 0.63])
+
+    # switch scale button and pixel text box
+    ax_button           = fig.add_axes([0.80, 0.22, 0.16, 0.06])
+    ax_box              = fig.add_axes([0.80, 0.14, 0.16, 0.05])
+
+    for ax in fig.axes:
+        ax.set_facecolor((1, 0, 0, 0.05))
 
     ax_image.set_title("Raman Image")
     ax_image.set_axis_off()
@@ -55,52 +129,71 @@ def show_hsi_viewer(auc_cube, spectra_list, raman_shift, idx_step, pixel_map, x,
     ax_ln_spectrum.set_xlabel(r"Raman Shift cm$^{-1}$")
     ax_ln_spectrum.set_ylabel("ln(Intensity)")
 
-    i_min, i_max = np.min(auc_cube), np.max(auc_cube)
-    for ax in fig.axes:
-        ax.set_facecolor((1,0,0,0.05))
+    # correct intensity range
+    if state["correction"] > 0:
+        print(f"Intensity correction applied: +{state['correction']:.4f} to shift all values positive")
 
-    correction = abs(min(i_min, 0))
-    if correction > 0:
-        print(f"Intensity correction applied: +{correction:.4f} to shift all values positive")
+    # initial plots
+    image = ax_image.imshow(
+        _apply_intensity_mask(state["auc_cube"][:, :, 0], state["i_min"], state["i_max"]),
+        aspect="equal", origin="upper"
+    )
+    first_spectrum       = spectra_list[pixel_map[0, 0]]
+    (pixel_spectrum,)    = ax_spectrum.plot(raman_shift_arr, first_spectrum, color=ACCENT)
+    (pixel_ln_spectrum,) = ax_ln_spectrum.plot(
+        raman_shift_arr,
+        np.log(np.maximum(first_spectrum + state["correction"] + 1e-10, 1e-10)),
+        color=ACCENT
+    )
 
-    auc_cube_corrected  = auc_cube + correction + 1e-10
-    log_v_min           = np.log(np.min(auc_cube_corrected))
-    log_v_max           = np.log(np.max(auc_cube_corrected))
-
-    # initial heatmap and spectra
-    image                   = ax_image.imshow(_apply_intensity_mask(auc_cube[:, :, 0], i_min, i_max), aspect="equal", origin="upper")
-    first_spectrum          = spectra_list[pixel_map[0, 0]]
-    (pixel_spectrum,)       = ax_spectrum.plot(raman_shift, first_spectrum, color=ACCENT)
-    (pixel_ln_spectrum,)    = ax_ln_spectrum.plot(raman_shift, np.log(np.maximum(first_spectrum + correction + 1e-10, 1e-10)), color=ACCENT)
-
-    scalar_mappable = cm.ScalarMappable(norm=Normalize(i_min, i_max), cmap="magma")
+    scalar_mappable = cm.ScalarMappable(norm=Normalize(state["i_min"], state["i_max"]), cmap="magma")
     scalar_mappable.set_array([])
     cbar = fig.colorbar(scalar_mappable, ax=ax_image)
-    cbar.set_ticks(np.linspace(i_min, i_max, 5))
+    cbar.set_ticks(np.linspace(state["i_min"], state["i_max"], 5))
     cbar.ax.yaxis.set_tick_params(color=FG, labelsize=8)
     plt.setp(cbar.ax.yaxis.get_ticklabels(), color=FG)
 
-    raman_shift_arr = np.array(raman_shift)
-    indices = np.arange(auc_cube.shape[-1])
+    # lines show the current window start/end on both spectrum panels
+    lower_limit_line    = ax_spectrum.axvline(state["band_starts"][0], color="#E07B54", linestyle="--", alpha=0.7)
+    upper_limit_line    = ax_spectrum.axvline(state["band_ends"][0],   color="#E07B54", linestyle="--", alpha=0.7)
+    lower_ln_limit_line = ax_ln_spectrum.axvline(state["band_starts"][0], color="#E07B54", linestyle="--", alpha=0.7)
+    upper_ln_limit_line = ax_ln_spectrum.axvline(state["band_ends"][0],   color="#E07B54", linestyle="--", alpha=0.7)
 
-    rolling_window = Slider(
-        ax=ax_slider, label="Raman Shift",
-        valmin=0, valmax=indices[-1],
-        valinit=0, valstep=indices
+    # widgets
+    n_bands_init = state["auc_cube"].shape[-1]
+    band_indices = np.arange(n_bands_init)
+
+    pos_slider = Slider(
+        ax=ax_pos_slider, label="Raman Shift",
+        valmin=0, valmax=n_bands_init - 1,
+        valinit=0, valstep=band_indices,
     )
-    rolling_window.label.set_color(FG)
-    rolling_window.valtext.set_color(FG)
-    rolling_window.track.set_color(SLIDER_TRACK)
-    rolling_window.poly.set_color(SLIDER_ACTIVE)
-    rolling_window.valtext.set_text(f"{raman_shift[0]:.0f} cm⁻¹")
-    
-    ax_slider.set_facecolor(WIDGET_PANEL)
+    pos_slider.label.set_color(FG)
+    pos_slider.valtext.set_color(FG)
+    pos_slider.track.set_color(SLIDER_TRACK)
+    pos_slider.poly.set_color(SLIDER_ACTIVE)
+    pos_slider.valtext.set_text(
+        f"{state['band_starts'][0]:.0f}–{state['band_ends'][0]:.0f} cm⁻¹"
+    )
+    ax_pos_slider.set_facecolor(WIDGET_PANEL)
 
-    # start slider in normal scale
+    width_slider = Slider(
+        ax=ax_width_slider, label="Window (cm⁻¹)",
+        valmin=2 * mean_step,
+        valmax=spectral_range * 0.5,   # cap at half the full range
+        valinit=initial_window_width_cm,
+        valstep=mean_step,
+    )
+    width_slider.label.set_color(FG)
+    width_slider.valtext.set_color(FG)
+    width_slider.track.set_color(SLIDER_TRACK)
+    width_slider.poly.set_color(SLIDER_ACTIVE)
+    ax_width_slider.set_facecolor(WIDGET_PANEL)
+
     intensity_slider = RangeSlider(
         ax=ax_intensity_slider, label="Intensity",
-        valmin=i_min, valmax=i_max,
-        valinit=(i_min, i_max),
+        valmin=state["i_min"], valmax=state["i_max"],
+        valinit=(state["i_min"], state["i_max"]),
         orientation="vertical",
     )
     intensity_slider.label.set_color(FG)
@@ -115,100 +208,132 @@ def show_hsi_viewer(auc_cube, spectra_list, raman_shift, idx_step, pixel_map, x,
     ax_button.set_facecolor(WIDGET_PANEL)
 
     text_box = TextBox(
-        ax_box,
-        "Pixel:",
+        ax_box, "Pixel:",
         textalignment="center",
         color=WIDGET_SURFACE,
-        hovercolor=WIDGET_EDGE
+        hovercolor=WIDGET_EDGE,
     )
     text_box.label.set_color(FG)
     text_box.text_disp.set_color(FG)
     text_box.set_val(str(pixel_map[0, 0]))
     ax_box.set_facecolor(WIDGET_PANEL)
 
-    lower_limit_line    = ax_spectrum.axvline(raman_shift_arr[0], color="#E07B54", linestyle="--", alpha=0.7)
-    upper_limit_line    = ax_spectrum.axvline(raman_shift_arr[idx_step], color="#E07B54", linestyle="--", alpha=0.7)
-    lower_ln_limit_line = ax_ln_spectrum.axvline(raman_shift_arr[0], color="#E07B54", linestyle="--", alpha=0.7)
-    upper_ln_limit_line = ax_ln_spectrum.axvline(raman_shift_arr[idx_step], color="#E07B54", linestyle="--", alpha=0.7)
-
     hover_text = ax_image.text(
         0.01, 0.99, "", transform=ax_image.transAxes,
         va="top", ha="left", color=FG, fontsize=8,
         bbox=dict(boxstyle="round,pad=0.2", facecolor=GRID, edgecolor=FG, alpha=0.85),
     )
-    
+
     fig.canvas.draw()
     background = fig.canvas.copy_from_bbox(fig.bbox)
 
+    # ---------------------------------------------------------- helpers
     def _get_image_range():
-        """Returns (i_min, i_max) in original scale regardless of slider mode."""
         v_min, v_max = intensity_slider.val
         if state["ln_scale"]:
-            return np.exp(v_min) - correction, np.exp(v_max) - correction
+            return np.exp(v_min) - state["correction"], np.exp(v_max) - state["correction"]
         return v_min, v_max
 
+    def _update_pos_slider_range():
+        """Clamp position slider to the new number of bands after a width change."""
+        n_bands = state["auc_cube"].shape[-1]
+        new_indices = np.arange(n_bands)
+        pos_slider.valmax = n_bands - 1
+        pos_slider.valstep = new_indices
+        pos_slider.ax.set_xlim(0, n_bands - 1)
+        # clamp current value
+        clamped = int(min(pos_slider.val, n_bands - 1))
+        pos_slider.set_val(clamped)
+
+    # ---------------------------------------------------------- callbacks
     def update(_val):
-        index = int(rolling_window.val)
+        index = int(pos_slider.val)
+        index = min(index, state["auc_cube"].shape[-1] - 1)
+
         try:
             pixel = int(text_box.text)
-        except (ValueError, KeyError):
+        except ValueError:
             return
 
         i_min_cur, i_max_cur = _get_image_range()
 
-        image.set_data(_apply_intensity_mask(auc_cube[:, :, index], i_min_cur, i_max_cur))
+        image.set_data(_apply_intensity_mask(state["auc_cube"][:, :, index], i_min_cur, i_max_cur))
         scalar_mappable.set_clim(i_min_cur, i_max_cur)
         cbar.set_ticks(np.linspace(i_min_cur, i_max_cur, 5))
         cbar.update_normal(scalar_mappable)
 
         spectrum = spectra_list[pixel]
         pixel_spectrum.set_ydata(spectrum)
-        pixel_ln_spectrum.set_ydata(np.log(np.maximum(spectrum + correction + 1e-10, 1e-10)))
+        pixel_ln_spectrum.set_ydata(
+            np.log(np.maximum(spectrum + state["correction"] + 1e-10, 1e-10))
+        )
 
-        x_start = raman_shift_arr[index]
-        x_end   = raman_shift_arr[index + idx_step - 1]
+        x_start = state["band_starts"][index]
+        x_end   = state["band_ends"][index]
         for line in [lower_limit_line, lower_ln_limit_line]:
             line.set_xdata([x_start, x_start])
         for line in [upper_limit_line, upper_ln_limit_line]:
             line.set_xdata([x_end, x_end])
-        rolling_window.valtext.set_text(f"{x_start:.0f}-{x_end:.0f} cm⁻¹")
-        
+        pos_slider.valtext.set_text(f"{x_start:.0f}–{x_end:.0f} cm⁻¹")
+
         ax_spectrum.relim()
         ax_spectrum.autoscale_view()
         ax_ln_spectrum.relim()
         ax_ln_spectrum.autoscale_view()
 
-        # recapture background after limit changes, then blit
         fig.canvas.restore_region(background)
         for ax in [ax_image, ax_spectrum, ax_ln_spectrum]:
             ax.redraw_in_frame()
         fig.canvas.blit(fig.bbox)
+
+    def on_width_changed(_val):
+        """Recompute auc_cube for the new window width, then reset intensity scale."""
+        try:
+            _recompute_auc(width_slider.val)
+        except ValueError as e:
+            print(e)
+            return
+
+        # reset intensity slider to cover the new cube's full range
+        new_i_min = state["i_min"]
+        new_i_max = state["i_max"]
+        if state["ln_scale"]:
+            new_lo = state["log_v_min"]
+            new_hi = state["log_v_max"]
+        else:
+            new_lo, new_hi = new_i_min, new_i_max
+
+        intensity_slider.valmin = new_lo
+        intensity_slider.valmax = new_hi
+        intensity_slider.ax.set_ylim(new_lo, new_hi)
+        intensity_slider.set_val((new_lo, new_hi))
+
+        _update_pos_slider_range()
+        update(None)
 
     def on_resize(_event):
         nonlocal background
         fig.canvas.draw()
         background = fig.canvas.copy_from_bbox(fig.bbox)
 
-    fig.canvas.mpl_connect("resize_event", on_resize)
-
     def on_scale_toggle(_event):
         v_min_cur, v_max_cur = intensity_slider.val
         state["ln_scale"] = not state["ln_scale"]
 
         if state["ln_scale"]:
-            new_min = np.log(max(v_min_cur + correction + 1e-10, 1e-10))
-            new_max = np.log(max(v_max_cur + correction + 1e-10, 1e-10))
-            intensity_slider.ax.set_ylim(log_v_min, log_v_max)
-            intensity_slider.valmin = log_v_min
-            intensity_slider.valmax = log_v_max
+            new_min = np.log(max(v_min_cur + state["correction"] + 1e-10, 1e-10))
+            new_max = np.log(max(v_max_cur + state["correction"] + 1e-10, 1e-10))
+            intensity_slider.ax.set_ylim(state["log_v_min"], state["log_v_max"])
+            intensity_slider.valmin = state["log_v_min"]
+            intensity_slider.valmax = state["log_v_max"]
             intensity_slider.label.set_text("ln(Intensity)")
             scale_button.label.set_text("Switch to standard scale")
         else:
-            new_min = np.exp(v_min_cur) - correction
-            new_max = np.exp(v_max_cur) - correction
-            intensity_slider.ax.set_ylim(i_min, i_max)
-            intensity_slider.valmin = i_min
-            intensity_slider.valmax = i_max
+            new_min = np.exp(v_min_cur) - state["correction"]
+            new_max = np.exp(v_max_cur) - state["correction"]
+            intensity_slider.ax.set_ylim(state["i_min"], state["i_max"])
+            intensity_slider.valmin = state["i_min"]
+            intensity_slider.valmax = state["i_max"]
             intensity_slider.label.set_text("Intensity")
             scale_button.label.set_text("Switch to ln scale")
 
@@ -228,25 +353,29 @@ def show_hsi_viewer(auc_cube, spectra_list, raman_shift, idx_step, pixel_map, x,
     def on_click(event):
         if event.inaxes != ax_image or not event.dblclick:
             return
-        col     = np.clip(int(event.xdata + 0.5), 0, y - 1)
-        row     = np.clip(int(event.ydata + 0.5), 0, x - 1)
-        pixel   = pixel_map[row, col]
+        col   = np.clip(int(event.xdata + 0.5), 0, y - 1)
+        row   = np.clip(int(event.ydata + 0.5), 0, x - 1)
+        pixel = pixel_map[row, col]
         text_box.set_val(str(pixel))
 
         spectrum = spectra_list[pixel]
         pixel_spectrum.set_ydata(spectrum)
-        pixel_ln_spectrum.set_ydata(np.log(np.maximum(spectrum + correction + 1e-10, 1e-10)))
-
+        pixel_ln_spectrum.set_ydata(
+            np.log(np.maximum(spectrum + state["correction"] + 1e-10, 1e-10))
+        )
         ax_spectrum.relim()
         ax_spectrum.autoscale_view()
         ax_ln_spectrum.relim()
         ax_ln_spectrum.autoscale_view()
         fig.canvas.draw_idle()
 
+    # -------------------------------------------------------- updates
     text_box.on_submit(update)
-    rolling_window.on_changed(update)
+    pos_slider.on_changed(update)
+    width_slider.on_changed(on_width_changed)
     intensity_slider.on_changed(update)
     scale_button.on_clicked(on_scale_toggle)
+    fig.canvas.mpl_connect("resize_event", on_resize)
     fig.canvas.mpl_connect("motion_notify_event", on_hover)
     fig.canvas.mpl_connect("button_press_event", on_click)
 

@@ -4,6 +4,7 @@ import pandas as pd
 import ramanspy as rp
 from .grid import RamanGrid
 from scipy.signal import convolve
+from scipy.integrate import cumulative_trapezoid
 
 def load_CNN_data(path="~/Code/Data_SH/poor_unoriented"):
     """Loads Raman Spectra dataset from RRUFF for training the CNN model.
@@ -71,8 +72,6 @@ def get_raw_hsi_cube(path, x, y, start=None, end=None):
 def get_area_under_hsi_cube(path, x, y, pipeline_id, rolling_window_width, start=None, end=None):
     grid = RamanGrid(path, x, y)
     pipeline = build_pipeline(pipeline_id)
-
-    # cropper
     cropper = rp.preprocessing.misc.Cropper(region=(start, end))
 
     # read spectral axis from first file only, same across all so its fine
@@ -86,7 +85,7 @@ def get_area_under_hsi_cube(path, x, y, pipeline_id, rolling_window_width, start
 
     # get number of indexes that correspond to rolling window width
     mean_step = np.mean(np.diff(cropped_axis))
-    idx_step = max(1, int(rolling_window_width // mean_step))
+    idx_step = max(2, int(rolling_window_width // mean_step))
 
     # trapezoidal kernel for area under curve using convolution
     auc_kernel = np.ones(idx_step) * mean_step
@@ -94,6 +93,12 @@ def get_area_under_hsi_cube(path, x, y, pipeline_id, rolling_window_width, start
     auc_kernel[-1] = 0.5 * mean_step
 
     n_bands = len(cropped_axis) - idx_step + 1 # accounting area
+
+    if n_bands <= 0:
+        raise ValueError(
+            f"Rolling window width was too large!"
+        )
+
     auc_cube = np.zeros((x, y, n_bands))
     spectra_list = np.zeros((x * y + 1, len(cropped_axis)))
     pixel_map = np.zeros((x, y), dtype=int) # map of pixel positions
@@ -108,16 +113,62 @@ def get_area_under_hsi_cube(path, x, y, pipeline_id, rolling_window_width, start
         if pipeline is not None:
             spectrum = pipeline.apply(spectrum)
 
-        spectral_data = spectrum.spectral_data # preprocessed now
+        intensity_vals = spectrum.spectral_data # preprocessed now
 
         # store full preprocessed spectral data for plotting later
-        spectra_list[pixel] = spectral_data
+        spectra_list[pixel] = intensity_vals
 
         # convolve with kernet to get rolling window areas
-        auc_cube[row, col] = convolve(spectral_data, auc_kernel, mode='valid')
+        auc_cube[row, col] = convolve(intensity_vals, auc_kernel, mode='valid')
 
         # store for plotting later
         pixel_map[row, col] = pixel
         pixel += 1
     
     return auc_cube, spectra_list, cropped_axis, idx_step, pixel_map
+
+def get_cumulative_hsi_cube(path, x, y, pipeline_id, start=None, end=None):
+    # grid object to traverse through the grid
+    grid = RamanGrid(path, x, y)
+
+    # build pipeline and cropper
+    pipeline = build_pipeline(pipeline_id)
+    cropper = rp.preprocessing.misc.Cropper(region=(start, end))
+
+    # get lenght of cropped spectral axis
+    files = grid.get_sorted_files()
+    spectral_axis, _ = read_spectrum(files[0])
+    ref_spectrum = rp.Spectrum(np.zeros(len(spectral_axis)), spectral_axis) # reference spectrum
+    ref_spectrum = cropper.apply(ref_spectrum) # crop reference spectrum
+    cropped_axis = ref_spectrum.spectral_axis
+    n = len(cropped_axis) # length of cropped spectral axis
+
+    # initialise variables
+    cumulative_cube = np.zeros((x, y, n)) # will hold the cumulative area
+    spectra_list = np.zeros((x * y + 1, n)) # will hold the spectrum for each pixel
+    pixel_map = np.zeros((x, y), dtype=int) # need this later for plotting
+
+    # initial start at pixel 1
+    pixel = 1 
+    # traverse through full grid of data
+    for file, row, col in grid.traverse():
+        # get and prepare spectrum
+        spectral_axis, spectral_data = read_spectrum(file)
+        spectrum = rp.Spectrum(spectral_data, spectral_axis)
+        spectrum = cropper.apply(spectrum)
+        if pipeline is not None:
+            spectrum = pipeline.apply(spectrum)
+
+        # store spectral data
+        spectral_data = spectrum.spectral_data # intensities
+        spectra_list[pixel] = spectral_data
+
+        # store the cumulative sum using trapezoidal integration
+        cum = cumulative_trapezoid(spectral_data, cropped_axis, initial=0) # returns n-1 vals so prepend 0 to get n vals
+        cumulative_cube[row, col] = cum
+
+        # store pixel and update
+        pixel_map[row, col] = pixel
+        pixel += 1
+
+    return cumulative_cube, spectra_list, cropped_axis, pixel_map

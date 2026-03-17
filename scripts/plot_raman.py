@@ -153,9 +153,9 @@ def prompt_heatmap_args():
             break
         print("Please enter 0, 1, 2, or 3.")
 
-    print("\nRolling window width in cm⁻¹ (default: 1, or '?' for help)")
+    print("\nRolling window width in cm⁻¹ (default: 2, or '?' for help)")
     while True:
-        rolling_window_width = _input("> ") or "1"
+        rolling_window_width = _input("> ") or "2"
         if rolling_window_width == "?":
             print(HELP_TEXT["heatmap"])
             continue
@@ -282,11 +282,11 @@ def main():
     path, x, y, mode, kwargs = prompt_args()
 
     if mode == "heatmap":
-        auc_cube, spectra_of_pixel, raman_shift, idx_step, pixel_map = get_area_under_hsi_cube(
-            path, x, y, kwargs["pipeline_id"], kwargs["rolling_window_width"],
+        cumulative_cube, spectra_of_pixel, raman_shift, pixel_map = get_cumulative_hsi_cube(
+            path, x, y, kwargs["pipeline_id"],
             kwargs["start"], kwargs["end"]
         )
-        show_hsi_viewer(auc_cube, spectra_of_pixel, raman_shift, idx_step, pixel_map, x, y)
+        show_hsi_viewer(cumulative_cube, spectra_of_pixel, raman_shift, pixel_map, x, y)
 
     elif mode == "unmixing":
         hsi_cube = get_raw_hsi_cube(path, x, y)

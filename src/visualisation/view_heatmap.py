@@ -227,7 +227,7 @@ def show_hsi_viewer(cumulative_cube, spectra_list, raman_shift, pixel_map, x, y)
     fig.canvas.draw()
     background = fig.canvas.copy_from_bbox(fig.bbox)
 
-    # ---------------------------------------------------------- helpers
+    # helpers
     def _get_image_range():
         v_min, v_max = intensity_slider.val
         if state["ln_scale"]:
@@ -245,7 +245,7 @@ def show_hsi_viewer(cumulative_cube, spectra_list, raman_shift, pixel_map, x, y)
         clamped = int(min(pos_slider.val, n_bands - 1))
         pos_slider.set_val(clamped)
 
-    # ---------------------------------------------------------- callbacks
+    # callbacks
     def update(_val):
         index = int(pos_slider.val)
         index = min(index, state["auc_cube"].shape[-1] - 1)

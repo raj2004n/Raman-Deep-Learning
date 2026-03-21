@@ -28,7 +28,7 @@ print(f"Signal Subspace dimension: {vd}")
 
 
 """
-nfindr = rp.analysis.unmix.NFINDR(n_endmembers=hysime.kf, abundance_method='fcls')
+nfindr = rp.analysis.unmix.NFINDR(n_components=hysime.kf, abundance_method='fcls')
 abundance_maps, endmembers = nfindr.apply(all_slices)
 
 rp.plot.spectra(

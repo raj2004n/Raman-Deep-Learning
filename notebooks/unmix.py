@@ -14,10 +14,10 @@ preprocessing_pipeline = rp.preprocessing.Pipeline([
 
 preprocessed_cell_layer = preprocessing_pipeline.apply(cell_layer)
 
-#nfindr = rp.analysis.unmix.NFINDR(n_endmembers=4, abundance_method='fcls')
+#nfindr = rp.analysis.unmix.NFINDR(n_components=4, abundance_method='fcls')
 #abundance_maps, endmembers = nfindr.apply(preprocessed_cell_layer)
 
-fippi = rp.analysis.unmix.VCA(n_endmembers=3, abundance_method='nnls')
+fippi = rp.analysis.unmix.VCA(n_components=3, abundance_method='nnls')
 abundance_maps, endmembers = fippi.apply(preprocessed_cell_layer)
 
 rp.plot.spectra(
